@@ -16,7 +16,7 @@ RMSE_thresh = 1.04;
 local_thresh = 0;
 
 % Initial learning with first batch
-% [hidneur_weights, outneur_weights, iterations] = Net_learnC(LearningFourier(1:300,:), hidneur_num, outneur_num, sec_nums, RMSE_thresh, local_thresh);
+[hidneur_weights, outneur_weights, iterations] = Net_learnC(LearningFourier(1:300,:), hidneur_num, outneur_num, sec_nums, RMSE_thresh, local_thresh);
 
 % Save weights
 % save('trained_weights.mat', 'hidneur_weights', 'outneur_weights');
@@ -30,12 +30,11 @@ StoppingErrorThreshold = 0.98;
 while(flag)
     ITERATION = ITERATION + 1;
     
-    % Process batches
-    for x = 0:2  % For 3 classes, 300 samples each
+    % Then process remaining batches with Net_learn_testcodeC
+    for x = 1:2  % For classes 2 and 3 (since class 1 was used to initialize)
         start_idx = x * 300 + 1;
         end_idx = (x+1) * 300;
         
-        % Learn with current batch
         [hidneur_weights, outneur_weights, iterations] = Net_learn_testcodeC(LearningFourier(start_idx:end_idx,:), hidneur_weights, hidneur_num, outneur_weights, outneur_num, sec_nums, RMSE_thresh, local_thresh);
         
         fprintf('Batch %d\n', (x+1));
