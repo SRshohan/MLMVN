@@ -1,6 +1,12 @@
-
-
 function [hidneur_weights, outneur_weights, iterations] = Net_learnC(input, hidneur_num, outneur_num, sec_nums, RMSE_thresh, local_thresh)
+
+% Display input information
+disp('=============================================');
+disp('STARTING Net_learnC FUNCTION');
+[n, m] = size(input);
+disp(['Input data: ', num2str(n), ' samples with ', num2str(m), ' columns']);
+disp(['Hidden neurons: ', num2str(hidneur_num), ', Output neurons: ', num2str(outneur_num)]);
+disp(['Sector numbers: [', num2str(sec_nums), '], RMSE threshold: ', num2str(RMSE_thresh)]);
 
 % (c) E.Aizenberg & I.Aizenberg 2014-2018
 % This function runs batch learning algorithm for MLMVN-LLS-SM n->M->k with
@@ -14,8 +20,8 @@ function [hidneur_weights, outneur_weights, iterations] = Net_learnC(input, hidn
 %
 % The batch learning algorithm is utilized as it is presented in the paper
 %
-% E. Aizenberg, I. Aizenberg, “Batch LLS-based Learning Algorithm for MLMVN
-% with Soft Margins”, Proceedings of the 2014 IEEE Symposium Series of
+% E. Aizenberg, I. Aizenberg, ï¿½Batch LLS-based Learning Algorithm for MLMVN
+% with Soft Marginsï¿½, Proceedings of the 2014 IEEE Symposium Series of
 % Computational Intelligence (SSCI-2014), December, 2014, pp. 48-55.   
 %
 % Calling Parameters:
@@ -64,15 +70,16 @@ function [hidneur_weights, outneur_weights, iterations] = Net_learnC(input, hidn
 %
 
 %Use the clock to set the stream of random numbers
-%RandStream.setDefaultStream(RandStream('mt19937ar','seed',sum(100*clock)));
+disp('Initializing random number generator...');
 RandStream.setGlobalStream(RandStream('mt19937ar','seed',sum(100*clock)));
 
 [n m]=size(input);
 
+disp('Extracting features and targets...');
 X = input(:, 1:m - outneur_num);
 y_d = input(:, m - outneur_num + 1:end);
-%Convert input values into complex numbers on the unit circle
-%X = exp(1i .* X);
+disp(['Features shape: ', num2str(size(X,1)), 'x', num2str(size(X,2))]);
+disp(['Targets shape: ', num2str(size(y_d,1)), 'x', num2str(size(y_d,2))]);
 
 %Determine the number of learning samples
 N = size(X, 1);
@@ -80,6 +87,7 @@ N = size(X, 1);
 %Determine the number of input variables n
 n = size(X, 2);
 
+disp('Generating random weights for hidden neurons...');
 %Generate random weights for the hidden neurons:
 hidneur_weights = zeros(n+1, hidneur_num);
 
@@ -94,9 +102,11 @@ for hh = 1 : hidneur_num
     hidneur_weights(:, hh) = w_re + 1i .* w_im;
 
 end
+disp('Hidden neuron weights initialized');
 
 
 %Generate random weights for the output neurons:
+disp('Generating random weights for output neurons...');
 outneur_weights = zeros(hidneur_num+1, outneur_num);
 
 for pp = 1 : outneur_num
@@ -109,10 +119,12 @@ for pp = 1 : outneur_num
     %Construct a weights vector, dimensions (hidneur_num+1 x 1)
     outneur_weights(:, pp) = w_re + 1i .* w_im;
 end
+disp('Output neuron weights initialized');
 
 
 %----
 
+disp('Converting class labels to phase values...');
 %Convert desired network output values (y_d), given as class labels, into
 %desired phase values (phase_d):
 phase_d = zeros(N, outneur_num);
@@ -133,7 +145,9 @@ end
 
 %Determine sector size (angle), separately for each output neuron.
 %sec_size is a (1 x outneur_num) vector
+disp('Calculating sector sizes...');
 sec_size = 2*pi ./ sec_nums;
+disp(['Sector sizes: [', num2str(sec_size), ']']);
 
 %Shift all desired phase values by half-sector counter-clockwise
 for pp = 1 : outneur_num
@@ -143,11 +157,13 @@ end
 
 
 %Construct a matrix of desired network outputs (lying on the unit circle)
+disp('Creating desired network outputs on unit circle...');
 znet_d = exp(1j .* phase_d);
 
 
 %append a column of 1s to X from the left, yielding a (N x n+1) matrix
 %app_X
+disp('Appending bias column to input data...');
 col_app(1:N) = 1;
 col_app = col_app.';
 app_X = [col_app X];
@@ -170,6 +186,7 @@ app_X = [col_app X];
 %Construct the pseudo-inverse of X
 %X_pinv = V * S_hpinv * U_hat';
 
+disp('Computing pseudo-inverse...');
 X_pinv = pinv(app_X);
 
 iterations = 0;
@@ -177,6 +194,7 @@ nesovpad = 1;
 
 min_nesovpad = N;
 
+disp('Creating learning statistics figure...');
 h = LearnStatsFig;
 handles = guidata(h);
 
@@ -187,8 +205,16 @@ min_RMSE = flintmax;
 
 N_x_outneur_num = N * outneur_num;
 
+disp('=============================================');
+disp('STARTING TRAINING LOOP');
+disp('=============================================');
+
 while ( LearnFlag == 1)
     
+    iterations = iterations + 1;
+    if mod(iterations, 10) == 0
+        disp(['Iteration ', num2str(iterations), '...']);
+    end
     
     %Compute the output of hidden neurons for all samples
     hid_outmat = app_X * hidneur_weights;
@@ -201,9 +227,15 @@ while ( LearnFlag == 1)
     hid_outmat = hid_outmat ./ abs_hid_outmat;
     
     %Determine the network error
+    if mod(iterations, 50) == 0
+        disp('  Computing backpropagation errors...');
+    end
     [hid_errmat] = ErrBackProp(hid_outmat, outneur_weights, phase_d, znet_d, y_d, sec_size, N, hidneur_num, outneur_num, local_thresh, abs_hid_outmat);
     
     %Adjust weights of hidden neurons
+    if mod(iterations, 50) == 0
+        disp('  Updating hidden neuron weights...');
+    end
     for hh = 1 : hidneur_num
         
         %hidneur_weights(:, hh) = HidNeuron_weightadj(X, hidneur_weights(:, hh), hid_errmat(:, hh), N);
@@ -217,18 +249,12 @@ while ( LearnFlag == 1)
     %Move outputs to the unit circle
     hid_outmat = hid_outmat ./ abs(hid_outmat);
     
+    if mod(iterations, 50) == 0
+        disp('  Updating output neuron weights...');
+    end
     [outneur_weights, z_outneur] = OutNeuron_weightadj(hid_outmat, outneur_weights, phase_d, znet_d, y_d, sec_size, N, outneur_num, local_thresh);
     
     %Compute and display learning statistics----
-    iterations = iterations + 1;
-    
-    %error
-    %err_all = sum( (znet_d - z_outneur./abs(z_outneur))' * (znet_d - z_outneur./abs(z_outneur)) );
-    
-    %if (err_all < min_err_all)
-    %    min_err_all = err_all;
-    %end
-    
     
     %Determine the number of nesovpad and angular RMSE
     current_phase = angle(z_outneur);
@@ -281,17 +307,24 @@ while ( LearnFlag == 1)
     
     if (ang_RMSE < min_RMSE)
         min_RMSE = ang_RMSE;
+        if mod(iterations, 10) == 0
+            disp(['  New minimum RMSE: ', num2str(min_RMSE)]);
+        end
     end
     
     %If nesovpad == 0, stop learning
     if ( (nesovpad ==0 )  && (ang_RMSE < RMSE_thresh) )
         
+        disp('CONVERGENCE REACHED: Zero classification errors and RMSE below threshold');
         LearnFlag = 0;
     end
     
     if (nesovpad < min_nesovpad)
         
         min_nesovpad = nesovpad;
+        if mod(iterations, 10) == 0
+            disp(['  New minimum misclassified count: ', num2str(min_nesovpad)]);
+        end
     end
     
     %Display the statistic in a separate figure
@@ -315,13 +348,13 @@ end
 
 close(h);
 
-disp(' ');
-disp(['Iteration: ', num2str(iterations)]);
+disp('=============================================');
+disp('TRAINING COMPLETE');
+disp(['Total iterations: ', num2str(iterations)]);
 %disp(['Squared norm of error ', num2str(err_all)]);
-disp(['Nesovapd: ', num2str(nesovpad)]);
-disp(['Ang RMSE: ', num2str(ang_RMSE)]);
-
-disp('Learning completed!');
+disp(['Final misclassification count: ', num2str(nesovpad), '/', num2str(N), ' samples']);
+disp(['Final Angular RMSE: ', num2str(ang_RMSE)]);
+disp('=============================================');
 
 
 
